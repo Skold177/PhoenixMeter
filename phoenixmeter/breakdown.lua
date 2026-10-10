@@ -9,7 +9,6 @@ local COLOR = theme.COLOR;
 
 local BASE_WIDTH      = 480;
 local PADDING         = theme.PADDING;
-local SAMURAI         = 12;
 local BAR_HEIGHT      = 18;
 local LIST_ROWS       = 12;
 local GRAPH_HEIGHT    = 72;
@@ -18,6 +17,7 @@ local MAX_HEIGHT      = 760;
 local CLOSE           = ICON_FA_XMARK;
 local CLOSE_CODEPOINT = 0xF00D;
 local SKULL           = ICON_FA_SKULL;
+local HAND_ATTACKS    = T{ 'Single attack', 'Double Attack', 'Triple Attack' };
 
 local breakdown = T{
     BASE_WIDTH = BASE_WIDTH,
@@ -396,34 +396,33 @@ local function has_melee(actor)
     return false;
 end
 
-local function rate_count(count, total)
-    if (total <= 0) then
-        return '-';
+local function hand_attacks(book)
+    local list = T{};
+    for count = 1, combat.SWING_LIMIT do
+        local label = HAND_ATTACKS[count] or ('%d attacks'):fmt(count);
+        if (count == combat.SWING_LIMIT) then
+            label = ('%d+ attacks'):fmt(count);
+        end
+        list:append(T{ key = tostring(count), label = label, count = book[count] or 0 });
     end
-    return ('%.0f%% (%s)'):fmt(count * 100 / total, theme.commas(count));
+    return list;
 end
 
-local function swing_bars(id, book, total, color, scale, factor)
+local function attack_bars(id, attacks, total, color, scale, factor)
     local items = T{};
-    for count = 1, combat.SWING_LIMIT do
-        local tally = book[count];
-        if (tally) then
-            local label = ('%d swings'):fmt(count);
-            if (count == 1) then
-                label = '1 swing';
-            elseif (count == combat.SWING_LIMIT) then
-                label = ('%d+ swings'):fmt(count);
-            end
+    for _, attack in ipairs(attacks) do
+        if (attack.count > 0) then
             items:append(T{
-                key   = tostring(count),
-                left  = label,
-                right = ('%s (%s)'):fmt(theme.percent(tally, total), theme.commas(tally)),
-                value = tally,
+                key   = attack.key,
+                left  = attack.label,
+                right = ('%s (%s)'):fmt(theme.percent(attack.count, total), theme.commas(attack.count)),
+                value = attack.count,
                 color = color,
+                tip   = attack.tip,
             });
         end
     end
-    bar_list(id, items, scale, factor);
+    bar_list(id, items, scale, factor, total);
 end
 
 local function hand_table(actor, h2h)
@@ -497,36 +496,46 @@ local function draw_melee(actor, scale, factor)
     end
 
     if (multi.rounds > 0) then
-        theme.section('MULTI-ATTACK');
-        if (imgui.BeginTable('##pm_multi', 4, ImGuiTableFlags_SizingStretchSame)) then
-            stat('Double', rate_count(multi.double, multi.rounds));
-            stat('Triple', rate_count(multi.triple, multi.rounds));
-            if (actor.job == SAMURAI or actor.sub == SAMURAI) then
-                stat('Zanshin', rate_count(multi.zanshin, multi.chances));
-                if (imgui.IsItemHovered()) then
-                    imgui.BeginTooltip();
-                    imgui.TextColored(COLOR.secondary, 'Estimated. A Zanshin swing looks like a double attack in the packet.');
-                    imgui.TextColored(COLOR.muted, 'Counted from extra swings after a missed or countered first swing,');
-                    imgui.TextColored(COLOR.muted, 'minus the double attack rate seen on rounds that opened with a hit.');
-                    imgui.EndTooltip();
-                end
-            else
-                stat('Zanshin', '-');
-            end
-            imgui.EndTable();
-        end
+        local main = hand_attacks(rounds.main);
+        main[2].count = multi.double;
+        table.insert(main, 3, T{
+            key   = 'zanshin',
+            label = 'Zanshin (estimated)',
+            count = multi.zanshin,
+            tip   = function ()
+                imgui.TextColored(COLOR.secondary, 'Estimated. A Zanshin swing looks like a double attack in the packet.');
+                imgui.TextColored(COLOR.muted, 'Counted from extra swings after a missed or countered first swing,');
+                imgui.TextColored(COLOR.muted, 'minus the double attack rate seen on rounds that opened with a hit.');
+                imgui.TextColored(COLOR.muted, ('%s of %s missed or countered first swings.'):fmt(theme.percent(multi.zanshin, multi.chances), theme.commas(multi.chances)));
+            end,
+        });
 
-        theme.section('MAIN-HAND SWINGS / ROUND');
-        swing_bars('##pm_main_swings', rounds.main, multi.rounds, color, scale, factor);
+        theme.section('MAIN HAND MULTI-ATTACK');
+        attack_bars('##pm_main_attacks', main, multi.rounds, color, scale, factor);
         if (rounds.dual > 0) then
-            theme.section('OFF-HAND SWINGS / ROUND');
-            swing_bars('##pm_off_swings', rounds.off, rounds.dual, color, scale, factor);
+            theme.section('OFF HAND MULTI-ATTACK');
+            attack_bars('##pm_off_attacks', hand_attacks(rounds.off), rounds.dual, color, scale, factor);
         end
     end
 
     if (rounds.h2h > 0) then
-        theme.section('FIST SWINGS / ROUND (2 IS A NORMAL ROUND)');
-        swing_bars('##pm_fist_swings', rounds.fists, rounds.h2h, color, scale, factor);
+        local fists = T{};
+        for count = 1, combat.SWING_LIMIT do
+            local label = 'Normal round';
+            if (count == 1) then
+                label = 'Single attack';
+            elseif (count == 3) then
+                label = '1 extra attack';
+            elseif (count == combat.SWING_LIMIT) then
+                label = ('%d+ extra attacks'):fmt(count - 2);
+            elseif (count > 3) then
+                label = ('%d extra attacks'):fmt(count - 2);
+            end
+            fists:append(T{ key = tostring(count), label = label, count = rounds.fists[count] or 0 });
+        end
+
+        theme.section('HAND-TO-HAND MULTI-ATTACK');
+        attack_bars('##pm_fist_attacks', fists, rounds.h2h, color, scale, factor);
     end
 
     local ranged = actor.abilities['ranged'];

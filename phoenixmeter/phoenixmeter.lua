@@ -1,6 +1,6 @@
 addon.name    = 'phoenixmeter';
 addon.author  = 'Skold';
-addon.version = '1.0';
+addon.version = '1.1';
 addon.desc    = 'Job-themed damage meter with live bars and per-player breakdowns.';
 addon.link    = 'https://phoenix-xi.com/';
 
@@ -12,6 +12,7 @@ local actions   = require('actions');
 local combat    = require('combat');
 local meter     = require('meter');
 local breakdown = require('breakdown');
+local popup     = require('popup');
 
 local SPEED        = 9;
 local REPORT_GAP   = 1.2;
@@ -36,6 +37,11 @@ local default_settings = T{
     detail_custom = false,
     detail_dx     = 0,
     detail_dy     = 0,
+    popup         = true,
+    popup_scale   = 1.2,
+    popup_custom  = false,
+    popup_x       = 0,
+    popup_y       = 0,
 };
 
 local pm = T{
@@ -44,12 +50,14 @@ local pm = T{
     focus            = nil,
     place_window     = true,
     place_detail     = true,
+    place_popup      = true,
     reset_position   = false,
     show_settings    = false,
     clear            = false,
     pending          = T{},
     last_pos_save    = 0,
     last_detail_save = 0,
+    last_popup_save  = 0,
     last_frame       = nil,
     meter_w          = 0,
     meter_moved      = false,
@@ -110,8 +118,10 @@ local function render(now)
         pm.settings.x             = default_settings.x;
         pm.settings.y             = default_settings.y;
         pm.settings.detail_custom = false;
+        pm.settings.popup_custom  = false;
         pm.place_window           = true;
         pm.place_detail           = true;
+        pm.place_popup            = true;
         pm.reset_position         = false;
         settings.save();
     end
@@ -129,6 +139,8 @@ local function render(now)
     local frame = now - (pm.last_frame or now);
     pm.last_frame = now;
     local factor = 1 - math.exp(-math.min(0.25, math.max(0, frame)) * SPEED);
+
+    popup.render(pm, now);
 
     if (not pm.settings.visible) then
         return;
@@ -149,6 +161,8 @@ local function print_help()
     say(('/pmeter mode <%s> - what the bars rank'):fmt(table.concat(meter.mode_keys(), '|')));
     say('/pmeter pets <together|separate> - add pet damage to its master, or give pets their own rows');
     say('/pmeter sc <split|closer|ignored> - skillchain damage: halved between opener and closer, all to the closer, or left out');
+    say('/pmeter popup [on|off] - skillchain popup: what your weaponskills make on your target');
+    say('/pmeter popup size <0.5-3> - skillchain popup size');
     say(('/pmeter report [p|l|l2|s] [1-18] - post the meter to chat (party, top %d by default)'):fmt(REPORT_COUNT));
     say('/pmeter clear - forget every recorded fight');
     say('/pmeter rows <3-25> - rows shown before the list is cut');
@@ -200,6 +214,28 @@ ashita.events.register('command', 'phoenixmeter_command', function (e)
         end
         pm.settings.chains = choice;
         settings.save();
+    elseif (sub == 'popup') then
+        local choice = (value or ''):lower();
+        if (choice == 'size') then
+            local number = tonumber(args[4]);
+            if (not number) then
+                say('Usage: /pmeter popup size <0.5-3>');
+                return;
+            end
+            pm.settings.popup_scale = math.min(3.0, math.max(0.5, number));
+            settings.save();
+            return;
+        end
+        if (choice == 'on' or choice == 'off') then
+            pm.settings.popup = choice == 'on';
+        elseif (choice == '') then
+            pm.settings.popup = not pm.settings.popup;
+        else
+            say('Usage: /pmeter popup [on|off]');
+            return;
+        end
+        settings.save();
+        say(('Skillchain popup %s.'):fmt(pm.settings.popup and 'on' or 'off'));
     elseif (sub == 'report') then
         local channel = 'p';
         local count   = REPORT_COUNT;
@@ -263,6 +299,7 @@ settings.register('settings', 'phoenixmeter_settings_update', function (s)
     settings.save();
     pm.place_window = true;
     pm.place_detail = true;
+    pm.place_popup  = true;
 end);
 
 sanitize();
