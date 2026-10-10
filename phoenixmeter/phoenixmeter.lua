@@ -1,6 +1,6 @@
 addon.name    = 'phoenixmeter';
 addon.author  = 'Skold';
-addon.version = '1.0';
+addon.version = '1.1';
 addon.desc    = 'Job-themed damage meter with live bars and per-player breakdowns.';
 addon.link    = 'https://phoenix-xi.com/';
 
