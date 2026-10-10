@@ -302,7 +302,7 @@ local function draw_header(pm, segment, width, scale)
     end
 end
 
-local SETTING_LABELS = T{ 'Scale', 'Opacity', 'Rows', 'Fight ends', 'Pets', 'Skillchains' };
+local SETTING_LABELS = T{ 'Scale', 'Opacity', 'Rows', 'Fight ends', 'Pets', 'Skillchains', 'SC Popup', 'Popup size' };
 
 local function label_column()
     local widest = 0;
@@ -330,6 +330,13 @@ end
 local function set_chains(pm, choice)
     if (pm.settings.chains ~= choice) then
         pm.settings.chains = choice;
+        settings.save();
+    end
+end
+
+local function set_popup(pm, on)
+    if (pm.settings.popup ~= on) then
+        pm.settings.popup = on;
         settings.save();
     end
 end
@@ -370,6 +377,18 @@ local function draw_settings(pm, width)
     if (theme.toggle_button('Ignored##pm_chains_ignored', pm.settings.chains == 'ignored', third)) then
         set_chains(pm, 'ignored');
     end
+
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(COLOR.muted, 'SC Popup');
+    imgui.SameLine(PADDING + indent);
+    if (theme.toggle_button('On##pm_popup_on', pm.settings.popup, half)) then
+        set_popup(pm, true);
+    end
+    imgui.SameLine();
+    if (theme.toggle_button('Off##pm_popup_off', not pm.settings.popup, half)) then
+        set_popup(pm, false);
+    end
+    settings_row(pm, 'Popup size', 'popup_scale', 0.5, 3.0, '%.2f', 0.05, width, true);
 
     imgui.Spacing();
     local clicked = theme.button_row('pm_panel', T{ 'Lock', 'Reset Position', 'Clear Fights' }, T{ pm.settings.locked, false, false }, width);
@@ -621,6 +640,9 @@ local function draw_context_menu(pm)
             set_chains(pm, 'ignored');
         end
         imgui.EndMenu();
+    end
+    if (imgui.MenuItem('Skillchain Popup', nil, pm.settings.popup)) then
+        set_popup(pm, not pm.settings.popup);
     end
     if (imgui.MenuItem('Report to Party')) then
         pm.report = T{ channel = 'p' };

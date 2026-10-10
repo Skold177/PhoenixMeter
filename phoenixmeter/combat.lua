@@ -1,6 +1,7 @@
 require('common');
 
-local dots = require('dots');
+local dots        = require('dots');
+local skillchains = require('skillchains');
 
 local combat = T{};
 
@@ -23,6 +24,12 @@ local EXP_WINDOW   = 600;
 local EXP_FLOOR    = 60;
 local WEAR_OFF     = 206;
 local MERIT_COST   = 10000;
+
+local AZURE_LORE     = 93;
+local CHAIN_AFFINITY = 94;
+local AFFINITY_TIME  = 30;
+local WILD_FLOURISH  = 209;
+local CHAINBOUND     = 529;
 
 local HIT = T{
     [1]   = true, [2]   = true, [67]  = true, [77]  = true, [110] = true, [157] = true, [185] = true,
@@ -116,6 +123,8 @@ local state = T{
     recent    = T{},
     engaged   = T{},
     resonance = T{},
+    windows   = T{},
+    affinity  = T{},
     chain_mode = 'closer',
     refreshed = -math.huge,
     zone      = nil,
@@ -631,6 +640,54 @@ local function add_chain(member, target, foe, element, amount, now)
     end
 end
 
+local function open_window(target, window, wait, duration, now)
+    window.started  = now;
+    window.opens    = now + wait;
+    window.closes   = now + duration;
+    window.duration = duration;
+    state.windows[target] = window;
+end
+
+local function note_window(act, ref, member, now)
+    local target = act.targets[1];
+    local result = target.results[1];
+    if (not result or not is_enemy(target.id)) then
+        return;
+    end
+
+    if (ref.category == 14 and act.param == WILD_FLOURISH) then
+        if (result.message == CHAINBOUND) then
+            open_window(target.id, T{ label = ref.name, who = member, properties = skillchains.BOUND, bound = true }, skillchains.BOUND_WAIT, skillchains.WINDOW, now);
+        end
+        return;
+    end
+
+    local used = skillchains.properties(ref.category, act.param);
+    if (used and ref.category == 4) then
+        local affinity = state.affinity[member.key];
+        local ready    = affinity ~= nil and now <= affinity.expires and result.value > 0;
+        if (ready and not affinity.lasting) then
+            state.affinity[member.key] = nil;
+        end
+        if (not ready) then
+            used = nil;
+        end
+    end
+
+    local held = combat.window(target.id, now);
+    if (result.proc_message and SKILLCHAINS[result.proc_message]) then
+        local element  = skillchains.closed(result.proc_message, held and held.properties, used);
+        local duration = (held and held.duration or skillchains.WINDOW) - 1;
+        if (element and skillchains.continues(element) and duration > skillchains.WAIT) then
+            open_window(target.id, T{ who = member, properties = T{ element }, element = element }, skillchains.WAIT, duration, now);
+        else
+            state.windows[target.id] = nil;
+        end
+    elseif (used and result.resolution ~= 1 and result.resolution ~= 3 and not MISS[result.message]) then
+        open_window(target.id, T{ label = ref.name, who = member, properties = used }, skillchains.WAIT, skillchains.WINDOW, now);
+    end
+end
+
 local function add_miss(segment, member, ref, foe, now)
     local actor = actor_in(segment, member);
     local entry = entry_in(actor.abilities, ref);
@@ -863,6 +920,11 @@ local function offense(act, member, now)
     if (not ref) then
         return;
     end
+
+    if (ref.category == 6 and (act.param == CHAIN_AFFINITY or act.param == AZURE_LORE)) then
+        state.affinity[member.key] = T{ expires = now + AFFINITY_TIME, lasting = act.param == AZURE_LORE };
+    end
+    note_window(act, ref, member, now);
 
     for _, target in ipairs(act.targets) do
         if (is_enemy(target.id)) then
@@ -1162,6 +1224,7 @@ function combat.message(packet, now)
         return;
     end
     stop_dots(packet.target, now);
+    state.windows[packet.target] = nil;
 
     local seen = state.engaged[packet.target];
     if (is_enemy(packet.target) and seen and now - seen <= LINGER) then
@@ -1219,6 +1282,8 @@ function combat.tick(now, idle, limit, chains)
         state.known     = T{};
         state.engaged   = T{};
         state.resonance = T{};
+        state.windows   = T{};
+        state.affinity  = T{};
         state.recent    = T{};
         state.dots      = T{};
         state.refreshed = -math.huge;
@@ -1257,6 +1322,8 @@ function combat.reset(now)
     state.recent  = T{};
     state.engaged = T{};
     state.resonance = T{};
+    state.windows = T{};
+    state.affinity = T{};
     state.dots    = T{};
     state.overall = new_segment(now, true);
     state.empty   = new_segment(now, false);
@@ -1537,6 +1604,18 @@ function combat.uptimes(segment, key, now)
         return a.share > b.share;
     end);
     return list;
+end
+
+function combat.window(target, now)
+    local window = state.windows[target];
+    if (window and now < window.closes) then
+        return window;
+    end
+    return nil;
+end
+
+function combat.skill_name(id)
+    return action_name(3, id);
 end
 
 function combat.live(segment)

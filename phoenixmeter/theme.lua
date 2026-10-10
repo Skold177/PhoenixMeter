@@ -90,6 +90,25 @@ theme.KINDS = T{
 
 theme.KIND_ORDER = T{ 'melee', 'ranged', 'ws', 'spell', 'ja', 'sc', 'add', 'reactive' };
 
+theme.CHAINS = T{
+    [1]  = rgb('e9e2c8'),
+    [2]  = rgb('9a8fb5'),
+    [3]  = rgb('f0604f'),
+    [4]  = rgb('c9a640'),
+    [5]  = rgb('4f86e0'),
+    [6]  = rgb('72d67c'),
+    [7]  = rgb('7fe0ea'),
+    [8]  = rgb('e070e8'),
+    [9]  = rgb('b98a5a'),
+    [10] = rgb('5aa8f2'),
+    [11] = rgb('ff8a3d'),
+    [12] = rgb('f29ce8'),
+    [13] = rgb('fff3c4'),
+    [14] = rgb('8f7fe0'),
+    [15] = rgb('fff3c4'),
+    [16] = rgb('8f7fe0'),
+};
+
 function theme.job(id)
     return theme.JOBS[id or 0] or theme.JOBS[0];
 end
