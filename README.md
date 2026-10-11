@@ -4,6 +4,8 @@ Phoenix Meter is a damage meter for Phoenix XI. It ranks you, your party, your a
 
 It works from what the server already sends your client, the same actions that fill your chat log. Nothing is sent anywhere unless you ask it to post a report to chat.
 
+![The meter ranking a party by damage, with one player's breakdown open beside it](images/meter.png)
+
 ## Features
 
 - **Live bars:** one row per player, coloured by job and ranked, with bars that slide as the order changes. Your own row is marked and never drops off the list.
